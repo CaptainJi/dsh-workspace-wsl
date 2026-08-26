@@ -1,8 +1,12 @@
 {
   "name": "@deepseek-ai/dsh-workspace-wsl",
   "version": "0.1.0",
-  "description": "Windows / WSL workspace picker for DeepSeek Harness: add and manage Windows and WSL workspaces from the sidebar; WSL workspaces run Linux commands by default (wsl_bash tool + prompt/env context).",
+  "description": "Add and manage Windows and WSL workspaces from the sidebar; WSL workspaces run Linux commands by default (wsl_bash tool).",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CaptainJi/dsh-workspace-wsl.git"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
@@ -35,11 +39,9 @@
     "build:client": "dsh build:client --entry client/index.tsx --out dist/client.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": {
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.6"
-  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.1 <0.1.1-0 || >=0.1.1-rc.1 <0.2.0-0",
     "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-ui-conversation": "^0.1.1-rc.2",
@@ -48,6 +50,12 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-workspace": "^0.1.1-rc.2",
     "@types/node": "^22.10.0",
     "typescript": "^5.6.0"
   }
