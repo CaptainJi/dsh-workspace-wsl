@@ -6,4 +6,4 @@
 # relative path. `@deepseek-ai/dsh-workspace-wsl` is this package's main entry (→ dist/index.js).
 - insert:
     - id: deepseek-ai-dsh-workspace-wsl
-      name: @deepseek-ai/dsh-workspace-wsl
+      name: '@deepseek-ai/dsh-workspace-wsl'
