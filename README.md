@@ -10,7 +10,7 @@
 dsh-workspace-wsl/            <- 仓库根 = 插件包
 ├── package.json              # name @deepseek-ai/dsh-workspace-wsl, dsh.client 声明
 ├── cordis.patch.yml          # 组合挂载行（id/name）
-├── src/index.ts              # Host 半边（wsl_bash 工具 + WSL 提示词 + DSH_WSL_* 环境变量 + wsl.exe 后端）
+├── src/index.ts              # Host 半边（wsl_bash 工具 + WSL 提示词 + DSH_WSL_* 环境变量 + wsl.exe 后端 + @Remote wslwk/* 服务）
 ├── client/index.tsx          # 客户端源码（侧边栏按钮 + 弹窗，待官方 web 构建）
 ├── tsconfig.json
 └── dist/                     # tsc 构建产物（index.js）
@@ -26,11 +26,11 @@ pnpm build:client     # 官方 web 构建 → dist/client.js（客户端 __Modul
 
 ## 能力
 
-- **Host**（`src/index.ts`）：`wsl_bash` 模型工具（WSL 工作区默认 Linux 命令）、`wsl:workspace-mode` 系统提示词段、`DSH_WSL_WORKSPACE/DSH_WSL_DISTRO/DSH_WSL_PATH` 环境变量、`wsl.exe` 执行后端。
-- **Client**（`client/index.tsx`）：侧边栏底部「＋ 工作区」按钮 + 弹窗（Windows 原生选目录 / WSL 发行版 + 目录浏览）、接管内置“＋”添加入口。
+- **Host**（`src/index.ts`）：`wsl_bash` 模型工具（WSL 工作区默认 Linux 命令）、`wsl:workspace-mode` 系统提示词段、`DSH_WSL_WORKSPACE/DSH_WSL_DISTRO/DSH_WSL_PATH` 环境变量、`wsl.exe` 执行后端，以及暴露给客户端的 `@Remote` 服务（`wslwk/probe`、`home`、`list-dir`、`run`、`list`、`create`、`delete`）。
+- **Client**（`client/index.tsx`）：侧边栏底部「＋ 工作区」按钮 + 弹窗（Windows 原生选目录 / WSL 发行版 + 目录浏览）、接管内置“＋”添加入口；客户端经 `ctx.remote.wslwk.*` 调用 Host 的 `@Remote` 服务，样式以 `<style>` 注入。
 
 ## 注意事项
 
-- 客户端 UI 依赖 `@deepseek-ai/dsh-client-*` 与官方 web 打包（`dist/client.js`）；`client/index.tsx` 顶部 `style`/`rpc` 两个 shim 需在打包时接到框架的样式/客户端→主机 RPC 通道。
+- 客户端 UI 依赖 `@deepseek-ai/dsh-client-*` 与官方 web 打包（`dist/client.js`）；`client/index.tsx` 已用官方包客户端 API 实现（`ctx.slots.inject/register` + `ctx.remote.wslwk.*` @Remote 调用 + `<style>` 注入），待 `pnpm build:client` 产出 web bundle 即可生效。
 - 沙箱内 `wsl.exe` 会被拒绝（E_ACCESSDENIED），但插件在宿主进程内调用，不受此限制。
 - 若 `wsl.exe` 可用但 UNC（`\\wsl$\...`）不可访问，可在 WSL 步骤填写「Windows 挂载根目录」（如 `D:\WSL`）。
