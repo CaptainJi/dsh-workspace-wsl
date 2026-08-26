@@ -1,4 +1,39 @@
+var __runInitializers = (this && this.__runInitializers) || function (thisArg, initializers, value) {
+    var useValue = arguments.length > 2;
+    for (var i = 0; i < initializers.length; i++) {
+        value = useValue ? initializers[i].call(thisArg, value) : initializers[i].call(thisArg);
+    }
+    return useValue ? value : void 0;
+};
+var __esDecorate = (this && this.__esDecorate) || function (ctor, descriptorIn, decorators, contextIn, initializers, extraInitializers) {
+    function accept(f) { if (f !== void 0 && typeof f !== "function") throw new TypeError("Function expected"); return f; }
+    var kind = contextIn.kind, key = kind === "getter" ? "get" : kind === "setter" ? "set" : "value";
+    var target = !descriptorIn && ctor ? contextIn["static"] ? ctor : ctor.prototype : null;
+    var descriptor = descriptorIn || (target ? Object.getOwnPropertyDescriptor(target, contextIn.name) : {});
+    var _, done = false;
+    for (var i = decorators.length - 1; i >= 0; i--) {
+        var context = {};
+        for (var p in contextIn) context[p] = p === "access" ? {} : contextIn[p];
+        for (var p in contextIn.access) context.access[p] = contextIn.access[p];
+        context.addInitializer = function (f) { if (done) throw new TypeError("Cannot add initializers after decoration has completed"); extraInitializers.push(accept(f || null)); };
+        var result = (0, decorators[i])(kind === "accessor" ? { get: descriptor.get, set: descriptor.set } : descriptor[key], context);
+        if (kind === "accessor") {
+            if (result === void 0) continue;
+            if (result === null || typeof result !== "object") throw new TypeError("Object expected");
+            if (_ = accept(result.get)) descriptor.get = _;
+            if (_ = accept(result.set)) descriptor.set = _;
+            if (_ = accept(result.init)) initializers.unshift(_);
+        }
+        else if (_ = accept(result)) {
+            if (kind === "field") initializers.unshift(_);
+            else descriptor[key] = _;
+        }
+    }
+    if (target) Object.defineProperty(target, contextIn.name, descriptor);
+    done = true;
+};
 import { defineTool } from '@deepseek-ai/dsh-tools';
+import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol';
 // Plugin display name, used in loader diagnostics / composition id.
 export const name = 'deepseek-ai-dsh-workspace-wsl';
 // Wait until the tool registry is ready before running.
@@ -226,4 +261,120 @@ export function apply(ctx) {
             return { DSH_WSL_WORKSPACE: '1', DSH_WSL_DISTRO: target.distro, DSH_WSL_PATH: target.wslPath };
         },
     });
+    // ---------------- client RPC (@Remote) ----------------
+    // Host-side @Remote service exposing wslwk/* to the client bundle. SRC mode
+    // derives wire fields from method parameter names, so every parameter below
+    // is a simple identifier that matches the client's strict descriptor exactly.
+    let WslwkService = (() => {
+        let _classSuper = TypertRemoteService;
+        let _instanceExtraInitializers = [];
+        let _probe_decorators;
+        let _home_decorators;
+        let _listDir_decorators;
+        let _run_decorators;
+        let _list_decorators;
+        let _create_decorators;
+        let _delete_decorators;
+        return class WslwkService extends _classSuper {
+            static {
+                const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0;
+                _probe_decorators = [Remote('probe')];
+                _home_decorators = [Remote('home')];
+                _listDir_decorators = [Remote('list-dir')];
+                _run_decorators = [Remote('run')];
+                _list_decorators = [Remote('list')];
+                _create_decorators = [Remote('create')];
+                _delete_decorators = [Remote('delete')];
+                __esDecorate(this, null, _probe_decorators, { kind: "method", name: "probe", static: false, private: false, access: { has: obj => "probe" in obj, get: obj => obj.probe }, metadata: _metadata }, null, _instanceExtraInitializers);
+                __esDecorate(this, null, _home_decorators, { kind: "method", name: "home", static: false, private: false, access: { has: obj => "home" in obj, get: obj => obj.home }, metadata: _metadata }, null, _instanceExtraInitializers);
+                __esDecorate(this, null, _listDir_decorators, { kind: "method", name: "listDir", static: false, private: false, access: { has: obj => "listDir" in obj, get: obj => obj.listDir }, metadata: _metadata }, null, _instanceExtraInitializers);
+                __esDecorate(this, null, _run_decorators, { kind: "method", name: "run", static: false, private: false, access: { has: obj => "run" in obj, get: obj => obj.run }, metadata: _metadata }, null, _instanceExtraInitializers);
+                __esDecorate(this, null, _list_decorators, { kind: "method", name: "list", static: false, private: false, access: { has: obj => "list" in obj, get: obj => obj.list }, metadata: _metadata }, null, _instanceExtraInitializers);
+                __esDecorate(this, null, _create_decorators, { kind: "method", name: "create", static: false, private: false, access: { has: obj => "create" in obj, get: obj => obj.create }, metadata: _metadata }, null, _instanceExtraInitializers);
+                __esDecorate(this, null, _delete_decorators, { kind: "method", name: "delete", static: false, private: false, access: { has: obj => "delete" in obj, get: obj => obj.delete }, metadata: _metadata }, null, _instanceExtraInitializers);
+                if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
+            }
+            constructor(c) {
+                super(c, 'wslwk');
+                __runInitializers(this, _instanceExtraInitializers);
+            }
+            async probe() {
+                const res = await runWsl({ args: ['--list', '--quiet'] });
+                if (!res.ok)
+                    return { wslOk: false, distros: [], error: res.error || 'wsl.exe 不可用' };
+                const distros = String(res.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+                if (distros.length === 0)
+                    return { wslOk: false, distros: [], error: '未检测到 WSL 发行版' };
+                return { wslOk: true, distros };
+            }
+            async home(distro) {
+                const res = await runWsl({ distro: String(distro || ''), args: ['bash', '-c', 'echo "$HOME"'] });
+                if (!res.ok)
+                    return { ok: false, error: res.error || '无法获取 HOME' };
+                const path = String(res.stdout || '').trim();
+                if (!path)
+                    return { ok: false, error: 'HOME 为空' };
+                return { ok: true, path: normLinux(path) };
+            }
+            async listDir(distro, path) {
+                const p = normLinux(path);
+                const res = await runWsl({ distro: String(distro || ''), args: ['ls', '-1A', '--file-type', '--', p] });
+                if (!res.ok)
+                    return { ok: false, error: res.error || '无法列出目录' };
+                const entries = [];
+                for (const raw of String(res.stdout || '').split(/\r?\n/)) {
+                    const line = raw.trim();
+                    if (!line)
+                        continue;
+                    const dir = line.endsWith('/');
+                    const name = dir ? line.slice(0, -1) : line;
+                    if (!name || name === '.' || name === '..')
+                        continue;
+                    entries.push({ name, dir });
+                }
+                return { ok: true, path: p, entries };
+            }
+            async run(distro, command) {
+                const res = await runWsl({ distro: String(distro || ''), args: ['bash', '-c', String(command || '')] });
+                return { ok: res.ok, exitCode: res.exitCode, stdout: res.stdout || '', stderr: res.stderr || '', error: res.error || null };
+            }
+            list() {
+                const items = (registry?.list?.() || []).map(describe);
+                return { items };
+            }
+            async create(payload) {
+                if (!registry)
+                    throw new Error('workspaceRegistry 服务不可用');
+                const kind = payload && payload.kind;
+                if (kind !== 'wsl') {
+                    const winPath = String(payload && payload.winPath || '').trim();
+                    if (!winPath)
+                        throw new Error('未选择 Windows 文件夹');
+                    const ws = await registry.create(winPath);
+                    return { workspaceId: String(ws.id) };
+                }
+                const distro = String(payload.distro || '').trim();
+                const wslPath = normLinux(payload.wslPath);
+                if (!distro)
+                    throw new Error('缺少 WSL 发行版名称');
+                if (!wslPath)
+                    throw new Error('缺少 Linux 路径');
+                const title = '🐧 ' + distro + ': ' + wslPath;
+                const rel = wslPath.replace(/^\//, '').replace(/\//g, BS);
+                const fallback = String(payload.fallbackRoot || '').trim().replace(/[\\/]+$/, '');
+                const winPath = fallback ? (fallback + BS + rel) : (UNC_PREFIX1 + distro + BS + rel);
+                const ws = await registry.create(winPath, title);
+                return { workspaceId: String(ws.id) };
+            }
+            async delete(workspaceId) {
+                if (!registry)
+                    throw new Error('workspaceRegistry 服务不可用');
+                const removed = await registry.delete(String(workspaceId));
+                if (removed === false)
+                    throw new Error('工作区不存在或已删除');
+                return { ok: true };
+            }
+        };
+    })();
+    new WslwkService(ctx);
 }
