@@ -1,22 +1,45 @@
 // @deepseek-ai/dsh-workspace-wsl — Client half (web UI).
 //
-// Build to dist/client.js (a window.__ModuleLoader__ module) with the official
-// DSH web build: `pnpm build:client`. This source lives OUTSIDE src/ so the host
-// `tsc -p tsconfig.json` build stays green.
-//
-// Two shims are the only package-specific wiring; everything else is generic
-// React + slot registration.
-//   - style(css): insert package CSS (client runtime `styles`).
-//   - rpc(method, args): client -> host JSON RPC (framework channel; in the
-//     Dynamic plugin this was `host.call`).
+// Official package-plugin client: registers into Slots, mounts the strict
+// Typert @Remote descriptor for the Host's WslwkService, and injects the
+// package CSS as a <style> tag. Client -> host calls go through
+// ctx.remote.wslwk.<method>() (no style/rpc shims, no host.call).
 import { createElement, useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 
-// eslint-disable-next-line no-console
-const style = (css) => console.warn('[dsh-workspace-wsl] style() not wired — build with the official client runtime', css.length)
-// eslint-disable-next-line no-console
-const rpc = (method, args) => {
-  console.warn('[dsh-workspace-wsl] rpc() not wired — connect the framework client->host channel', method, args)
-  return Promise.reject(new Error('wslwk RPC not wired: ' + method))
+// Cordis fiber dependencies: slots for UI registration, remote for the
+// @Remote client facade, workspaces/sessions/timer for the existing dialog.
+export const inject = ['slots', 'remote', 'workspaces', 'sessions', 'timer']
+
+// Passthrough strict codec: every wslwk/* method is plain lossless JSON, so
+// `.parse` is the identity. `typeSymbol` is only a nonempty marker.
+const jsonCodec = (typeSymbol) => ({ mode: 'strict', typeSymbol, schema: { parse: (value) => value } })
+
+// Hand-written strict Typert descriptor for the Host @Remote service. Wire
+// field names must match the Host method parameter names exactly (SRC mode).
+const wslwkRemote = {
+  package: '@deepseek-ai/dsh-workspace-wsl',
+  descriptors: [
+    { id: '@deepseek-ai/dsh-workspace-wsl#wslwk/probe', service: 'wslwk', namespace: 'wslwk', method: 'probe', invocation: { kind: 'direct' }, parameters: [], result: jsonCodec('WslwkProbe') },
+    { id: '@deepseek-ai/dsh-workspace-wsl#wslwk/home', service: 'wslwk', namespace: 'wslwk', method: 'home', invocation: { kind: 'direct' }, parameters: [{ name: 'distro', wire: 'distro', source: 'json', codec: jsonCodec('string') }], result: jsonCodec('WslwkHome') },
+    { id: '@deepseek-ai/dsh-workspace-wsl#wslwk/list-dir', service: 'wslwk', namespace: 'wslwk', method: 'list-dir', invocation: { kind: 'direct' }, parameters: [{ name: 'distro', wire: 'distro', source: 'json', codec: jsonCodec('string') }, { name: 'path', wire: 'path', source: 'json', codec: jsonCodec('string') }], result: jsonCodec('WslwkListDir') },
+    { id: '@deepseek-ai/dsh-workspace-wsl#wslwk/run', service: 'wslwk', namespace: 'wslwk', method: 'run', invocation: { kind: 'direct' }, parameters: [{ name: 'distro', wire: 'distro', source: 'json', codec: jsonCodec('string') }, { name: 'command', wire: 'command', source: 'json', codec: jsonCodec('string') }], result: jsonCodec('WslwkRun') },
+    { id: '@deepseek-ai/dsh-workspace-wsl#wslwk/list', service: 'wslwk', namespace: 'wslwk', method: 'list', invocation: { kind: 'direct' }, parameters: [], result: jsonCodec('WslwkList') },
+    { id: '@deepseek-ai/dsh-workspace-wsl#wslwk/create', service: 'wslwk', namespace: 'wslwk', method: 'create', invocation: { kind: 'direct' }, parameters: [{ name: 'payload', wire: 'payload', source: 'json', codec: jsonCodec('object') }], result: jsonCodec('WslwkCreate') },
+    { id: '@deepseek-ai/dsh-workspace-wsl#wslwk/delete', service: 'wslwk', namespace: 'wslwk', method: 'delete', invocation: { kind: 'direct' }, parameters: [{ name: 'workspaceId', wire: 'workspaceId', source: 'json', codec: jsonCodec('string') }], result: jsonCodec('WslwkDelete') },
+  ],
+}
+
+// Inject the package CSS once, mirroring the official client-module CSS hook
+// (a plain <style> tag; the module system claims it for HMR accounting).
+function injectCss(css) {
+  if (typeof document === 'undefined') return
+  const tagId = '@deepseek-ai/dsh-workspace-wsl/client/index.css'
+  if (document.querySelector('style[data-plugin-css="' + tagId + '"]') !== null) return
+  const tag = document.createElement('style')
+  tag.dataset.plugin = '@deepseek-ai/dsh-workspace-wsl'
+  tag.dataset.pluginCss = tagId
+  tag.textContent = css
+  document.head.appendChild(tag)
 }
 
 const el = createElement
@@ -64,10 +87,15 @@ const CSS = `
 .wslwk-addbtn.rail{width:32px;margin:0 auto;}
 `
 
-export function apply(ctx: any) {
-  const slots = ctx.get?.('slots')
-  style(CSS)
+export async function apply(ctx: any) {
+  const slots = ctx.slots
+  injectCss(CSS)
   if (!slots) return
+
+  // Mount the strict @Remote descriptor; dispose it when this fiber stops.
+  const disposeRemote = ctx.remote && typeof ctx.remote.$mount === 'function'
+    ? await ctx.remote.$mount(wslwkRemote)
+    : null
 
   // ---------- shared dialog open store ----------
   let dialogOpen = false
@@ -82,11 +110,24 @@ export function apply(ctx: any) {
     return v
   }
 
-  const workspaces = ctx.get?.('workspaces')
-  const sessions = ctx.get?.('sessions')
-  const timer = ctx.get?.('timer')
+  const workspaces = ctx.workspaces
+  const sessions = ctx.sessions
+  const timer = ctx.timer
   const parentLinux = (p: string) => (p === '/' ? '/' : (p.replace(/\/[^/]*\/?$/, '') || '/'))
   const joinLinux = (base: string, name: string) => (base === '/' ? '/' + name : base + '/' + name)
+
+  // Client -> host @Remote call helper: unwraps the { ok, value | error } envelope.
+  async function callWslwk(method: string, ...args: any[]) {
+    const svc = ctx.remote && ctx.remote.wslwk
+    if (!svc) throw new Error('wslwk 远程服务未就绪')
+    const fn = svc[method]
+    if (typeof fn !== 'function') throw new Error('wslwk 方法不存在: ' + method)
+    const res = await fn.apply(svc, args)
+    if (res && res.ok) return res.value
+    const e = res && res.error
+    const message = e ? (e.message || e.code || 'wslwk/' + method + ' 调用失败') : ('wslwk/' + method + ' 调用失败')
+    throw new Error(typeof message === 'string' ? message : JSON.stringify(message))
+  }
 
   async function openWorkspace(workspaceId: string) {
     if (!workspaces) return false
@@ -146,7 +187,7 @@ export function apply(ctx: any) {
     const [testResult, setTestResult] = useState<any>(null)
 
     const refreshList = useCallback(async () => {
-      try { const r = await rpc('wslwk/list', {}); setItems((r && r.items) || []) }
+      try { const r = await callWslwk('list'); setItems((r && r.items) || []) }
       catch (e) { setItems([]) }
     }, [])
 
@@ -161,7 +202,7 @@ export function apply(ctx: any) {
 
     function loadDir(d: string, p: string) {
       setListError(null); setEntries(null)
-      rpc('wslwk/list-dir', { distro: d, path: p || '/' }).then((r: any) => {
+      callWslwk('list-dir', d, p || '/').then((r: any) => {
         if (!r || !r.ok) { setListError((r && r.error) || '无法列出目录'); setEntries([]); return }
         setWslPath(r.path); setEntries(r.entries)
       }).catch((e) => { setListError(String((e && e.message) || e)); setEntries([]) })
@@ -170,12 +211,12 @@ export function apply(ctx: any) {
     function enterWsl() {
       setStep('wsl'); setError(null); setTestResult(null)
       if (probe !== null) return
-      rpc('wslwk/probe', {}).then((p: any) => {
+      callWslwk('probe').then((p: any) => {
         setProbe(p)
         if (p && p.wslOk && p.distros && p.distros.length) {
           const d = p.distros[0]
           setDistro(d)
-          rpc('wslwk/home', { distro: d }).then((h: any) => {
+          callWslwk('home', d).then((h: any) => {
             const home = h && h.ok ? h.path : '/'
             setWslPath(home); loadDir(d, home)
           }).catch(() => { setWslPath('/'); loadDir(d, '/') })
@@ -194,7 +235,7 @@ export function apply(ctx: any) {
       if (!winPath) { setError('请先选择文件夹'); return }
       setBusy(true); setError(null)
       try {
-        const created = await rpc('wslwk/create', { kind: 'windows', winPath })
+        const created = await callWslwk('create', { kind: 'windows', winPath })
         const ok = await openWorkspace(created.workspaceId)
         if (ok) setOpen(false); else setError('工作区已创建，但打开会话失败（可稍后在列表中点击「打开」）')
       } catch (e) { setError(String((e && e.message) || e)) }
@@ -211,7 +252,7 @@ export function apply(ctx: any) {
       if (fr) payload.fallbackRoot = fr
       setBusy(true); setError(null)
       try {
-        const created = await rpc('wslwk/create', payload)
+        const created = await callWslwk('create', payload)
         const ok = await openWorkspace(created.workspaceId)
         if (ok) setOpen(false); else setError('工作区已创建，但打开会话失败（可稍后在列表中点击「打开」）')
       } catch (e) { setError(String((e && e.message) || e)) }
@@ -224,7 +265,7 @@ export function apply(ctx: any) {
       if (!d) { setTestResult({ ok: false, text: '请先填写发行版名称' }); return }
       setTestResult(null); setBusy(true)
       try {
-        const r = await rpc('wslwk/run', { distro: d, command: 'echo wsl-ok && uname -s && pwd' })
+        const r = await callWslwk('run', d, 'echo wsl-ok && uname -s && pwd')
         setTestResult(r && r.ok ? { ok: true, text: (r.stdout || '').trim() || 'ok' } : { ok: false, text: (r && r.error) || '失败' })
       } catch (e) { setTestResult({ ok: false, text: String((e && e.message) || e) }) }
       setBusy(false)
@@ -232,7 +273,7 @@ export function apply(ctx: any) {
 
     async function removeItem(id: string) {
       setBusy(true); setError(null)
-      try { await rpc('wslwk/delete', { workspaceId: id }); await refreshList() }
+      try { await callWslwk('delete', id); await refreshList() }
       catch (e) { setError(String((e && e.message) || e)) }
       setBusy(false)
     }
@@ -338,4 +379,9 @@ export function apply(ctx: any) {
   slots.inject('conversation.hero.workspace.directoryFlow', () => slots.register(
     { name: 'conversation.hero.workspace.directoryFlow', id: 'wslwk-flow' },
     (props: any) => el(FlowAdapter, { open: props.open, onCancel: props.onCancel })))
+
+  // Reversible: unmount the @Remote descriptor when this plugin stops.
+  return async () => {
+    if (disposeRemote) { try { await disposeRemote() } catch {} }
+  }
 }
