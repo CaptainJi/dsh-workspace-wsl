@@ -18,7 +18,7 @@
 | 分类 `ui` | ✅ |
 
 ### 提交数 ≥ 10
-本仓库当前提交数不足 10。剩余真实工作（客户端 web bundle 构建 + `@Remote` RPC）完成并逐条提交后即达标。
+客户端 → 主机 `@Remote` RPC（`wslwk/*`）已完成并逐条提交；待官方 web 构建产出 `dist/client.js` 后即可达标。
 
 ## 二、市场条目（提交到 awesome-dsh-plugin 仓库）
 
@@ -41,10 +41,10 @@ npm ci
 node scripts/generate-readme.mjs
 ```
 
-## 三、剩余待办（客户端 bundle + RPC）
+## 三、剩余待办（客户端 bundle）
 
-- `dist/client.js`（`window.__ModuleLoader__` web 模块）需官方 web 构建产出（`pnpm build:client`，需联网）。
-- 客户端 → 主机 RPC（`wslwk/*`）需按框架 `@Remote`/服务通道接线，替换当前 `client/index.tsx` 里的 `style`/`rpc` 两个 shim。
+- `dist/client.js`（`window.__ModuleLoader__` web 模块）需官方 web 构建产出（`pnpm build:client`，需联网 + 官方工具）。
+- 客户端 → 主机 RPC（`wslwk/*`）已完成：Host 侧 `@Remote` 服务（`src/index.ts`）暴露 `wslwk/probe`、`home`、`list-dir`、`run`、`list`、`create`、`delete`；`client/index.tsx` 挂载 strict 描述符并经 `ctx.remote.wslwk.*` 调用（已移除 `style`/`rpc` shim）。
 
 ## 四、截图（可选，推荐）
 
