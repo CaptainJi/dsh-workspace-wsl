@@ -11,6 +11,7 @@
 // @ts-nocheck
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 
 // Plugin display name, used in loader diagnostics / composition id.
 export const name = 'deepseek-ai-dsh-workspace-wsl'
@@ -230,4 +231,92 @@ export function apply(ctx: Context) {
       return { DSH_WSL_WORKSPACE: '1', DSH_WSL_DISTRO: target.distro, DSH_WSL_PATH: target.wslPath }
     },
   })
+
+  // ---------------- client RPC (@Remote) ----------------
+  // Host-side @Remote service exposing wslwk/* to the client bundle. SRC mode
+  // derives wire fields from method parameter names, so every parameter below
+  // is a simple identifier that matches the client's strict descriptor exactly.
+  class WslwkService extends TypertRemoteService {
+    constructor(c) {
+      super(c, 'wslwk')
+    }
+
+    @Remote('probe')
+    async probe() {
+      const res = await runWsl({ args: ['--list', '--quiet'] })
+      if (!res.ok) return { wslOk: false, distros: [], error: res.error || 'wsl.exe 不可用' }
+      const distros = String(res.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+      if (distros.length === 0) return { wslOk: false, distros: [], error: '未检测到 WSL 发行版' }
+      return { wslOk: true, distros }
+    }
+
+    @Remote('home')
+    async home(distro) {
+      const res = await runWsl({ distro: String(distro || ''), args: ['bash', '-c', 'echo "$HOME"'] })
+      if (!res.ok) return { ok: false, error: res.error || '无法获取 HOME' }
+      const path = String(res.stdout || '').trim()
+      if (!path) return { ok: false, error: 'HOME 为空' }
+      return { ok: true, path: normLinux(path) }
+    }
+
+    @Remote('list-dir')
+    async listDir(distro, path) {
+      const p = normLinux(path)
+      const res = await runWsl({ distro: String(distro || ''), args: ['ls', '-1A', '--file-type', '--', p] })
+      if (!res.ok) return { ok: false, error: res.error || '无法列出目录' }
+      const entries = []
+      for (const raw of String(res.stdout || '').split(/\r?\n/)) {
+        const line = raw.trim()
+        if (!line) continue
+        const dir = line.endsWith('/')
+        const name = dir ? line.slice(0, -1) : line
+        if (!name || name === '.' || name === '..') continue
+        entries.push({ name, dir })
+      }
+      return { ok: true, path: p, entries }
+    }
+
+    @Remote('run')
+    async run(distro, command) {
+      const res = await runWsl({ distro: String(distro || ''), args: ['bash', '-c', String(command || '')] })
+      return { ok: res.ok, exitCode: res.exitCode, stdout: res.stdout || '', stderr: res.stderr || '', error: res.error || null }
+    }
+
+    @Remote('list')
+    list() {
+      const items = (registry?.list?.() || []).map(describe)
+      return { items }
+    }
+
+    @Remote('create')
+    async create(payload) {
+      if (!registry) throw new Error('workspaceRegistry 服务不可用')
+      const kind = payload && payload.kind
+      if (kind !== 'wsl') {
+        const winPath = String(payload && payload.winPath || '').trim()
+        if (!winPath) throw new Error('未选择 Windows 文件夹')
+        const ws = await registry.create(winPath)
+        return { workspaceId: String(ws.id) }
+      }
+      const distro = String(payload.distro || '').trim()
+      const wslPath = normLinux(payload.wslPath)
+      if (!distro) throw new Error('缺少 WSL 发行版名称')
+      if (!wslPath) throw new Error('缺少 Linux 路径')
+      const title = '🐧 ' + distro + ': ' + wslPath
+      const rel = wslPath.replace(/^\//, '').replace(/\//g, BS)
+      const fallback = String(payload.fallbackRoot || '').trim().replace(/[\\/]+$/, '')
+      const winPath = fallback ? (fallback + BS + rel) : (UNC_PREFIX1 + distro + BS + rel)
+      const ws = await registry.create(winPath, title)
+      return { workspaceId: String(ws.id) }
+    }
+
+    @Remote('delete')
+    async delete(workspaceId) {
+      if (!registry) throw new Error('workspaceRegistry 服务不可用')
+      const removed = await registry.delete(String(workspaceId))
+      if (removed === false) throw new Error('工作区不存在或已删除')
+      return { ok: true }
+    }
+  }
+  new WslwkService(ctx)
 }
