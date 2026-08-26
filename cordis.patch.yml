@@ -1,0 +1,9 @@
+# @deepseek-ai/dsh-workspace-wsl bundle layer — applied when a profile lists this bundle
+# (package.json declares `dsh.bundle.patch` pointing at this file).
+#
+# PITFALL: `name` is a PACKAGE NAME (resolved through the profile's node_modules
+# or the installation fallback `$DSH_HOME/profiles/node_modules`), NOT a
+# relative path. `@deepseek-ai/dsh-workspace-wsl` is this package's main entry (→ dist/index.js).
+- insert:
+    - id: deepseek-ai-dsh-workspace-wsl
+      name: @deepseek-ai/dsh-workspace-wsl
