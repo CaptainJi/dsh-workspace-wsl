@@ -160,6 +160,21 @@ window.__ModuleLoader__.load({
         }, wide ? '＋ 工作区' : '＋');
       }
 
+      // Adapter: route the built-in add flow into our dialog (shadow the native picker).
+      function FlowAdapter(props) {
+        useEffect(() => {
+          if (!props.open) return;
+          let cancelled = false;
+          const dispose = timer ? timer.timeout(() => {
+            if (cancelled) return;
+            try { if (typeof props.onCancel === 'function') props.onCancel() } catch {}
+            setOpen(true);
+          }, 0) : null;
+          return () => { cancelled = true; if (dispose) dispose() };
+        }, [props.open]);
+        return null;
+      }
+
       function WorkspaceDialog() {
         const open = useDialogOpen();
         const [step, setStep] = useState('choose');
@@ -364,6 +379,12 @@ window.__ModuleLoader__.load({
       slots.inject('shell.overlay', () => slots.register(
         { name: 'shell.overlay', id: 'wslwk-dialog', order: 40 },
         () => el(WorkspaceDialog, {})));
+      slots.inject('sidebar.workspaces.directoryFlow', () => slots.register(
+        { name: 'sidebar.workspaces.directoryFlow', priority: -1 },
+        (props) => el(FlowAdapter, { open: props.open, onCancel: props.onCancel })));
+      slots.inject('conversation.hero.workspace.directoryFlow', () => slots.register(
+        { name: 'conversation.hero.workspace.directoryFlow', priority: -1 },
+        (props) => el(FlowAdapter, { open: props.open, onCancel: props.onCancel })));
 
       // Reversible: unmount the @Remote descriptor when this plugin stops.
       return async () => {
