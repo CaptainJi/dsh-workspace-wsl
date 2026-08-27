@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
 
     // Cordis fiber dependencies: slots for UI registration, remote for the
     // @Remote client facade, workspaces/sessions/timer for the existing dialog.
-    exports.inject = ['slots', 'remote', 'workspaces', 'sessions', 'timer'];
+    exports.inject = ['slots', 'wslwk', 'workspaces', 'sessions', 'timer'];
 
     // Passthrough strict codec: every wslwk/* method is plain lossless JSON, so
     // `.parse` is the identity. `typeSymbol` is only a nonempty marker.
@@ -99,8 +99,8 @@ window.__ModuleLoader__.load({
       if (!slots) return;
 
       // Mount the strict @Remote descriptor; dispose it when this fiber stops.
-      const disposeRemote = ctx.remote && typeof ctx.remote.$mount === 'function'
-        ? await ctx.remote.$mount(wslwkRemote)
+      const disposeRemote = ctx.wslwk && typeof ctx.wslwk.$mount === 'function'
+        ? await ctx.wslwk.$mount(wslwkRemote)
         : null;
 
       // ---------- shared dialog open store ----------
@@ -124,7 +124,7 @@ window.__ModuleLoader__.load({
 
       // Client -> host @Remote call helper: unwraps the { ok, value | error } envelope.
       async function callWslwk(method, ...args) {
-        const svc = ctx.remote && ctx.remote.wslwk;
+        const svc = ctx.wslwk;
         if (!svc) throw new Error('wslwk 远程服务未就绪');
         const fn = svc[method];
         if (typeof fn !== 'function') throw new Error('wslwk 方法不存在: ' + method);
